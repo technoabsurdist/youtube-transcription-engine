@@ -89,28 +89,27 @@ def generate_transcription_steps(url):
     profiler = cProfile.Profile()
     profiler.enable()
     start = time.time()
-    yield "Starting transcription...\n"
+    # yield "Starting transcription...\n"
 
-    yield "Downloading video...\n"
+    yield "Fetching video...\n"
     video_path = download_video(url)
-    yield "Video downloaded.\n"
 
     chunk_paths = split_audio_ffmpeg(video_path)
 
     yield "Transcribing...\n"
     progress_queue = []
     raw_transcripts = whisper_transcription_pipeline(chunk_paths, progress_queue)
-    # for msg in progress_queue:
-        # yield msg + "\n"
 
     combined = "\n".join(raw_transcripts)
-    yield f"Full transcription:\n{combined}\n"
+    yield f"\n\nFull transcription:\n{combined}\n\n"
+
+    yield "\n\n"
 
     profiler.disable()
     profiler.dump_stats("transcription_pipeline_profile.prof")
 
     elapsed = time.time() - start
-    yield f"Elapsed time: {elapsed:.2f}s\n"
+    yield f"\n\n\nElapsed time: {elapsed:.2f}s\n"
 
 @app.route('/')
 def serve_client():
