@@ -35,7 +35,7 @@ def download_video(url):
         }
         with YoutubeDL(options) as ydl:
             ydl.download([url])
-        return "downloads/transcript.mp3", ("Unknown Title", "Unknown Author", 0)
+        return "downloads/transcript.mp3", (None, None, None)
 
 def transcribe_chunk(chunk):
     with open(chunk, "rb") as audio_file:
@@ -77,18 +77,22 @@ def generate_transcription_steps(url):
 
     yield "Fetching video...\n"
     video_path, (video_title, video_author, video_length) = download_video(url)
-    yield f"Title: {video_title}\nCreator: {video_author}\nLength: {video_length} seconds\n\n"
+    if video_title is not None:
+        yield f"Title: {video_title}\n"
+    if video_author is not None:
+        yield f"Creator: {video_author}\n"
+    if video_length is not None:
+        yield f"Length: {video_length} seconds\n"
+    yield "\n"
 
     chunk_paths = split_audio_ffmpeg(video_path)
 
     yield "Transcribing...\n"
     progress_queue = []
     raw_transcripts = whisper_transcription_pipeline(chunk_paths, progress_queue)
-    for msg in progress_queue:
-        yield msg + "\n"
 
     combined = "\n".join(raw_transcripts)
-    yield f"\nFull transcription:\n{combined}\n\n"
+    yield f"\nTranscription:\n{combined}\n\n"
 
     profiler.disable()
     profiler.dump_stats("transcription_pipeline_profile.prof")
