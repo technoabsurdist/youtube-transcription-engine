@@ -22,3 +22,10 @@ replacing pydub with ffmpeg for audio chunking:
 1 hour: 52 seconds
 
 - [x] challenge: out of order responses because of concurrency --fix
+
+challenges ahead:
+
+- [ ] bug: mix-up between past and current transcriptions. sometimes previous transcriptions show up in future ones.
+- [ ] faster! faster! faster! goal is for this to be the fastest youtube transcription engine on earth.
+  - experiment with smaller chunks, more workers, making download / chunking faster, etc.
+- [ ] deploy to prod
