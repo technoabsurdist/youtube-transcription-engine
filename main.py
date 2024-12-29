@@ -49,39 +49,41 @@ def split_audio_ffmpeg(file_path, chunk_duration_sec=360):
         "-c", "copy", f"{output_dir}/chunk_%03d.mp3"
     ]
     subprocess.run(command, check=True)
-    return [os.path.join(output_dir, f) for f in os.listdir(output_dir) if f.endswith(".mp3")]
+    return sorted([os.path.join(output_dir, f) for f in os.listdir(output_dir) if f.endswith(".mp3")])
 
 def transcribe_chunk(chunk):
     with open(chunk, "rb") as audio_file:
         transcription = client.audio.transcriptions.create(model="whisper-1", file=audio_file)
     return transcription.text
 
-def pipeline_worker(task_deque, result_list, lock, progress_queue):
+def pipeline_worker(task_deque, result_dict, lock, progress_queue):
     while True:
         lock.acquire()
         if not task_deque:
             lock.release()
             break
-        chunk_path = task_deque.popleft()
+        index, chunk_path = task_deque.popleft()
         lock.release()
+
         progress_queue.append(f"Transcribing {os.path.basename(chunk_path)}...")
         result = transcribe_chunk(chunk_path)
+
         lock.acquire()
-        result_list.append(result)
+        result_dict[index] = result
         lock.release()
 
 def whisper_transcription_pipeline(chunk_paths, progress_queue):
-    task_deque = deque(chunk_paths)
-    result_list = []
+    task_deque = deque((i, p) for i, p in enumerate(chunk_paths))
+    result_dict = {}
     lock = Lock()
     threads = []
-    for _ in range(32):
-        thread = Thread(target=pipeline_worker, args=(task_deque, result_list, lock, progress_queue))
+    for _ in range(16):
+        thread = Thread(target=pipeline_worker, args=(task_deque, result_dict, lock, progress_queue))
         thread.start()
         threads.append(thread)
     for thread in threads:
         thread.join()
-    return result_list
+    return [result_dict[i] for i in range(len(chunk_paths))]
 
 def generate_transcription_steps(url):
     profiler = cProfile.Profile()
@@ -93,17 +95,14 @@ def generate_transcription_steps(url):
     video_path = download_video(url)
     yield "Video downloaded.\n"
 
-    yield "Splitting audio...\n"
     chunk_paths = split_audio_ffmpeg(video_path)
-    yield f"Split into {len(chunk_paths)} chunks.\n"
 
     yield "Transcribing...\n"
     progress_queue = []
     raw_transcripts = whisper_transcription_pipeline(chunk_paths, progress_queue)
-    for msg in progress_queue:
-        yield msg + "\n"
+    # for msg in progress_queue:
+        # yield msg + "\n"
 
-    yield "All chunks transcribed.\n"
     combined = "\n".join(raw_transcripts)
     yield f"Full transcription:\n{combined}\n"
 
