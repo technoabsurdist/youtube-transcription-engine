@@ -20,3 +20,5 @@ replacing pydub with ffmpeg for audio chunking:
 15 minutes: 30.40508
 30 minutes: 45 seconds
 1 hour: 52 seconds
+
+- [ ] main current challenge: out of order responses because of concurrency --fix

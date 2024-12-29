@@ -1,25 +1,22 @@
-from pytube import YouTube
 import os
 import time
 import ssl
-from yt_dlp import YoutubeDL
-import subprocess
-import openai
-from openai import OpenAI
-from dotenv import load_dotenv
-from concurrent.futures import ThreadPoolExecutor
 import cProfile
+import subprocess
+from pytube import YouTube
+from yt_dlp import YoutubeDL
+from dotenv import load_dotenv
 from collections import deque
 from threading import Thread, Lock
+from flask import Flask, request, Response, send_from_directory
+import openai
+from openai import OpenAI
 
-# Load your OpenAI API key
 load_dotenv()
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-
-# Disable SSL verification
 ssl._create_default_https_context = ssl._create_unverified_context
-
 client = OpenAI(api_key=OPENAI_API_KEY)
+app = Flask(__name__, static_folder='static')
 
 def download_video(url):
     try:
@@ -35,7 +32,7 @@ def download_video(url):
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
-                'preferredquality': '128',  # Optimized for smaller size
+                'preferredquality': '128',
             }],
             'outtmpl': 'downloads/transcript',
         }
@@ -43,30 +40,23 @@ def download_video(url):
             ydl.download([url])
         return "downloads/transcript.mp3"
 
-def split_audio_ffmpeg(file_path, chunk_duration_sec=360):  # Reduced chunk size to 6 minutes
+def split_audio_ffmpeg(file_path, chunk_duration_sec=360):
     output_dir = "downloads/chunks"
     os.makedirs(output_dir, exist_ok=True)
     command = [
-        "ffmpeg",
-        "-i", file_path,
-        "-f", "segment",
-        "-segment_time", str(chunk_duration_sec),
-        "-c", "copy",
-        f"{output_dir}/chunk_%03d.mp3"
+        "ffmpeg", "-i", file_path,
+        "-f", "segment", "-segment_time", str(chunk_duration_sec),
+        "-c", "copy", f"{output_dir}/chunk_%03d.mp3"
     ]
     subprocess.run(command, check=True)
     return [os.path.join(output_dir, f) for f in os.listdir(output_dir) if f.endswith(".mp3")]
 
 def transcribe_chunk(chunk):
-    print(f"Transcribing {chunk}...")
     with open(chunk, "rb") as audio_file:
-        transcription = client.audio.transcriptions.create(
-            model="whisper-1",
-            file=audio_file
-        )
-        return transcription.text
+        transcription = client.audio.transcriptions.create(model="whisper-1", file=audio_file)
+    return transcription.text
 
-def pipeline_worker(task_deque, result_list, lock):
+def pipeline_worker(task_deque, result_list, lock, progress_queue):
     while True:
         lock.acquire()
         if not task_deque:
@@ -74,82 +64,65 @@ def pipeline_worker(task_deque, result_list, lock):
             break
         chunk_path = task_deque.popleft()
         lock.release()
+        progress_queue.append(f"Transcribing {os.path.basename(chunk_path)}...")
         result = transcribe_chunk(chunk_path)
         lock.acquire()
         result_list.append(result)
         lock.release()
 
-def whisper_transcription_pipeline(chunk_paths):
+def whisper_transcription_pipeline(chunk_paths, progress_queue):
     task_deque = deque(chunk_paths)
     result_list = []
     lock = Lock()
-
-    num_workers = 32  # Increased parallelism
     threads = []
-
-    for _ in range(num_workers):
-        thread = Thread(target=pipeline_worker, args=(task_deque, result_list, lock))
+    for _ in range(32):
+        thread = Thread(target=pipeline_worker, args=(task_deque, result_list, lock, progress_queue))
         thread.start()
         threads.append(thread)
-
     for thread in threads:
         thread.join()
-
     return result_list
 
-def batch_post_process_transcripts(raw_transcriptions):
-    system_prompt = """
-    You are a helpful assistant. Your task is to correct 
-    any spelling discrepancies in the transcribed text. Only add necessary 
-    punctuation such as periods, commas, and capitalization, and use only the 
-    context provided.
-    """
-    full_transcription = "\n".join(raw_transcriptions)
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        temperature=0,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": full_transcription}
-        ]
-    )
-    return response.choices[0].message.content
-
-def main(url):
-    start_time = time.time()
-
+def generate_transcription_steps(url):
     profiler = cProfile.Profile()
     profiler.enable()
+    start = time.time()
+    yield "Starting transcription...\n"
 
-    # Download the video
+    yield "Downloading video...\n"
     video_path = download_video(url)
-    
-    # Split the audio into chunks using ffmpeg
+    yield "Video downloaded.\n"
+
+    yield "Splitting audio...\n"
     chunk_paths = split_audio_ffmpeg(video_path)
-    
-    # Transcribe the audio chunks using a pipelined approach
-    raw_transcriptions = whisper_transcription_pipeline(chunk_paths)
-    
-    # Post-process the transcription in batch
-    corrected_transcription = batch_post_process_transcripts(raw_transcriptions)
-    
-    # Save the corrected transcription
-    with open(f"downloads/{os.path.basename(url)}_transcription.txt", "w") as f:
-        f.write(corrected_transcription)
+    yield f"Split into {len(chunk_paths)} chunks.\n"
+
+    yield "Transcribing...\n"
+    progress_queue = []
+    raw_transcripts = whisper_transcription_pipeline(chunk_paths, progress_queue)
+    for msg in progress_queue:
+        yield msg + "\n"
+
+    yield "All chunks transcribed.\n"
+    combined = "\n".join(raw_transcripts)
+    yield f"Full transcription:\n{combined}\n"
 
     profiler.disable()
     profiler.dump_stats("transcription_pipeline_profile.prof")
-    
-    print(f"Transcription for {url} completed. Check downloads/{os.path.basename(url)}_transcription.txt for the output.")
-    end_time = time.time()
-    elapsed_time = end_time - start_time  # Calculate elapsed time
-    print(f"Elapsed time: {elapsed_time:.5f} seconds")
 
-video_1h = "https://www.youtube.com/watch?v=139UPjoq7Kw&ab_channel=JaneStreet"
-video_15m = "https://www.youtube.com/watch?v=UhG56kltfP4&ab_channel=QuantaMagazine"
-video_30m = "https://www.youtube.com/watch?v=IQqtsm-bBRU&ab_channel=3Blue1Brown"
+    elapsed = time.time() - start
+    yield f"Elapsed time: {elapsed:.2f}s\n"
+
+@app.route('/')
+def serve_client():
+    return send_from_directory(app.static_folder, 'client.html')
+
+@app.route('/transcribe', methods=['POST'])
+def transcribe():
+    youtube_url = request.form.get('url', '')
+    if not youtube_url:
+        return "No URL provided.", 400
+    return Response(generate_transcription_steps(youtube_url), mimetype='text/plain')
 
 if __name__ == "__main__":
-    main(video_15m)
-    main(video_30m)
-    main(video_1h)
+    app.run(debug=True)
