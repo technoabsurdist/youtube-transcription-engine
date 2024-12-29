@@ -4,16 +4,38 @@ import ssl
 from openai import OpenAI
 import time
 import cProfile
-from dotenv import load_dotenv
 from collections import deque
 from threading import Thread, Lock
-from app.download import download_video
 from app.audio import split_audio_ffmpeg
+from pytube import YouTube
 
 load_dotenv()
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 ssl._create_default_https_context = ssl._create_unverified_context
 client = OpenAI(api_key=OPENAI_API_KEY)
+
+def download_video(url):
+    try:
+        yt = YouTube(url)
+        audio_stream = yt.streams.filter(only_audio=True).first()
+        download_path = audio_stream.download(output_path='downloads')
+        os.rename(download_path, 'downloads/transcript.mp3')
+        return "downloads/transcript.mp3", (yt.title, yt.author, yt.length)
+    except:
+        from yt_dlp import YoutubeDL
+        options = {
+            'nocheckcertificate': True,
+            'format': 'bestaudio/best',
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '128',
+            }],
+            'outtmpl': 'downloads/transcript',
+        }
+        with YoutubeDL(options) as ydl:
+            ydl.download([url])
+        return "downloads/transcript.mp3", ("Unknown Title", "Unknown Author", 0)
 
 def transcribe_chunk(chunk):
     with open(chunk, "rb") as audio_file:
@@ -31,7 +53,6 @@ def pipeline_worker(task_deque, result_dict, lock, progress_queue):
 
         progress_queue.append(f"Transcribing {os.path.basename(chunk_path)}...")
         result = transcribe_chunk(chunk_path)
-
         lock.acquire()
         result_dict[index] = result
         lock.release()
@@ -53,24 +74,24 @@ def generate_transcription_steps(url):
     profiler = cProfile.Profile()
     profiler.enable()
     start = time.time()
-    # yield "Starting transcription...\n"
 
     yield "Fetching video...\n"
-    video_path = download_video(url)
+    video_path, (video_title, video_author, video_length) = download_video(url)
+    yield f"Title: {video_title}\nCreator: {video_author}\nLength: {video_length} seconds\n\n"
 
     chunk_paths = split_audio_ffmpeg(video_path)
 
     yield "Transcribing...\n"
     progress_queue = []
     raw_transcripts = whisper_transcription_pipeline(chunk_paths, progress_queue)
+    for msg in progress_queue:
+        yield msg + "\n"
 
     combined = "\n".join(raw_transcripts)
-    yield f"\n\nFull transcription:\n{combined}\n\n"
-
-    yield "\n\n"
+    yield f"\nFull transcription:\n{combined}\n\n"
 
     profiler.disable()
     profiler.dump_stats("transcription_pipeline_profile.prof")
 
     elapsed = time.time() - start
-    yield f"\n\n\nElapsed time: {elapsed:.2f}s\n"
+    yield f"Elapsed time: {elapsed:.2f}s\n"
