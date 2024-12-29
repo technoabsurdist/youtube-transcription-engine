@@ -1,4 +1,4 @@
-backend
+youtube transcription engine
 
 - download video audio reliably (try with various ways)
 - call whisper backend with streaming
