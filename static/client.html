@@ -3,17 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YouTube Transcription</title>
+    <title>youtube transcription engine</title>
     <style>
         body {
             font-family: Arial, sans-serif;
             margin: 0;
             padding: 20px;
             background-color: #f4f4f9;
+            display: flex;
+            gap: 20px;
         }
         .container {
-            max-width: 600px;
-            margin: auto;
+            flex: 1;
             background: #fff;
             padding: 20px;
             border-radius: 8px;
@@ -47,16 +48,25 @@
             white-space: pre-wrap;
             overflow-wrap: break-word;
         }
+        img {
+            max-width: 100%;
+            height: auto;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h2>YouTube Transcription</h2>
-        <p>Enter a YouTube link to get its transcription.</p>
-        <input type="text" id="youtube-url" placeholder="Enter YouTube link" required>
-        <button onclick="startTranscription()">Transcribe</button>
-        <h3>Response:</h3>
+        <h2>youtube transcription engine</h2>
+        <p>enter a youtube link to get its transcription.</p>
+        <input type="text" id="youtube-url" placeholder="youtube link" required>
+        <button onclick="startTranscription()">transcribe</button>
+        <h3>response:</h3>
         <pre id="response"></pre>
+    </div>
+
+    <div class="container">
+        <h2>benchmarking: expected processing times</h2>
+        <img src="/static/processing_times.png" alt="Processing Time Benchmarks">
     </div>
 
     <script>

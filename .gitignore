@@ -3,4 +3,8 @@
 /myenv
 *.mp3
 *.webm
-*.prof
+*.git commit -m "Remove cached __pycache__ and add to .gitignore"
+prof
+__pycache__/*
+__pycache_git commit -m "Remove cached __pycache__ and add to .gitignore"
+_

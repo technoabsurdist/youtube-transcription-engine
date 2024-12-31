@@ -33,4 +33,4 @@ challenges ahead:
 
 current results:
 
-<img src="processing_times.png" height="600" />
+<img src="./static/processing_times.png" height="600" />
