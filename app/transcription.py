@@ -67,7 +67,7 @@ def generate_transcription_steps(url: str):
     cleanup_files()
     
     try:
-        # Use streaming pipeline instead of separate download and split
+        yield "Fetching...\n"
         chunk_paths, (video_title, video_author, video_length) = create_streaming_pipeline(url)
         
         if video_title is not None:

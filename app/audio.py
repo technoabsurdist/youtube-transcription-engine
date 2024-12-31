@@ -75,39 +75,28 @@ class ChunkProcessor:
             self.download_complete.set()
 
 def create_streaming_pipeline(url: str, chunk_duration_sec: int = 180) -> Tuple[List[str], Tuple[str, str, int]]:
-    """
-    Creates an optimized streaming pipeline that downloads YouTube audio and splits it into chunks.
-    Returns a list of chunk paths and video metadata (title, author, length).
-    """
-    # Create output directory
     output_dir = "downloads/chunks"
     os.makedirs(output_dir, exist_ok=True)
     
-    # First, get video metadata
     with YoutubeDL() as ydl:
         info = ydl.extract_info(url, download=False)
         title = info.get('title')
         author = info.get('uploader')
         length = info.get('duration')
     
-    # Initialize the chunk processor
     processor = ChunkProcessor(output_dir, chunk_duration_sec)
     
-    # Start download and split process in a separate thread
     download_thread = threading.Thread(
         target=processor.download_and_split,
         args=(url,)
     )
     download_thread.start()
     
-    # Wait for completion
     processor.download_complete.wait()
     
-    # Check for errors
     if processor.error:
         raise processor.error
     
-    # Get all chunk paths
     chunk_paths = []
     while not processor.chunk_queue.empty():
         chunk_paths.append(processor.chunk_queue.get())
