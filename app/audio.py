@@ -1,7 +1,6 @@
 import os
 import subprocess
 from typing import List, Tuple, Dict, Optional
-from concurrent.futures import ThreadPoolExecutor
 import threading
 from queue import Queue
 from pathlib import Path
@@ -19,27 +18,25 @@ class ChunkProcessor:
     def download_and_split(self, url: str) -> None:
         """Download and split audio in a separate thread."""
         try:
-            # Use lower quality audio sufficient for transcription
             ytdlp_cmd = [
                 'yt-dlp',
-                '-f', 'worstaudio[ext=m4a]',  # Smallest audio format
-                '--no-continue',  # Don't resume downloads
-                '--rm-cache-dir',  # Clean cache
-                '-o', '-',  # Output to stdout
+                '-f', 'worstaudio[ext=m4a]',  
+                '--no-continue',  
+                '--rm-cache-dir',  
+                '-o', '-',  
                 url
             ]
             
             ffmpeg_cmd = [
                 'ffmpeg',
-                '-i', 'pipe:0',  # Read from stdin
-                '-ar', '16000',   # Reduce sample rate
-                '-ac', '1',       # Mono audio
-                '-f', 'segment',  # Enable segmenting
+                '-i', 'pipe:0',  
+                '-ar', '16000',   
+                '-ac', '1',       
+                '-f', 'segment',
                 '-segment_time', str(self.chunk_duration),
                 f'{self.output_dir}/chunk_%03d.mp3'
             ]
             
-            # Start the yt-dlp process
             ytdlp_process = subprocess.Popen(
                 ytdlp_cmd,
                 stdout=subprocess.PIPE,
@@ -47,7 +44,6 @@ class ChunkProcessor:
                 bufsize=10 * 1024 * 1024  # 10MB buffer
             )
             
-            # Start the ffmpeg process
             ffmpeg_process = subprocess.Popen(
                 ffmpeg_cmd,
                 stdin=ytdlp_process.stdout,
@@ -56,20 +52,16 @@ class ChunkProcessor:
                 bufsize=10 * 1024 * 1024  # 10MB buffer
             )
             
-            # Close pipe in yt-dlp process
             if ytdlp_process.stdout:
                 ytdlp_process.stdout.close()
             
-            # Wait for ffmpeg to complete
             ffmpeg_stderr = ffmpeg_process.communicate()[1]
             if ffmpeg_process.returncode != 0:
                 raise Exception(f"FFmpeg error: {ffmpeg_stderr.decode()}")
             
-            # Check yt-dlp process
             if ytdlp_process.wait() != 0:
                 raise Exception(f"yt-dlp error: {ytdlp_process.stderr.read().decode()}")
             
-            # Add all created chunks to the queue in order
             chunk_files = sorted(self.output_dir.glob('chunk_*.mp3'))
             if not chunk_files:
                 raise Exception("No audio chunks were created")
