@@ -23,7 +23,14 @@ replacing pydub with ffmpeg for audio chunking gives a nice optimization:
 
 challenges ahead:
 
-- [ ] bug: mix-up between past and current transcriptions. sometimes previous transcriptions show up in future ones.
-- [ ] faster! faster! faster! goal is for this to be the fastest youtube transcription engine on earth.
+- [x] bug: mix-up between past and current transcriptions. sometimes previous transcriptions show up in future ones.
+- [x] faster! faster! faster! goal is for this to be the fastest youtube transcription engine on earth.
   - experiment with smaller chunks, more workers, making download / chunking faster, etc.
+  - what worked: streaming audio pipeline with direct yt-dlp to ffmpeg processing (instead of downloading video)
+    10 minute transcription takes ~20 seconds
+    1 hour transcription takes ~60 seconds
 - [ ] deploy to prod
+
+current results:
+
+<img src="processing_times.png" height="600" />

@@ -45,6 +45,22 @@ def whisper_transcription_pipeline(chunk_paths, progress_queue):
         thread.join()
     return [result_dict[i] for i in range(len(chunk_paths))]
 
+def benchmark_transcription(url: str):
+    start = time.time()
+    cleanup_files()
+    
+    try:
+        chunk_paths, (video_title, video_author, video_length) = create_streaming_pipeline(url)
+        progress_queue = []
+        raw_transcripts = whisper_transcription_pipeline(chunk_paths, progress_queue)
+        elapsed = time.time() - start
+        return {
+            'video_length': video_length,
+            'elapsed_time': elapsed
+        }
+    finally:
+        cleanup_files()
+
 def generate_transcription_steps(url: str):
     start = time.time()
     
