@@ -1,5 +1,9 @@
 youtube transcription engine
 
+current results:
+<img src="./static/processing_times.png" height="600" />
+
+
 technical overview:
 flask web app that transcribes youtube videos using openai's whisper model. implements streaming pipeline architecture for downloading audio, splitting into chunks, and parallel processing.
 
@@ -83,6 +87,3 @@ paste youtube url, get transcription. processing time scales linearly with video
 challenges ahead:
 
 - [ ] deploy to prod
-
-current results:
-<img src="./static/processing_times.png" height="600" />
